@@ -29,7 +29,6 @@
 /**************************************************************************/
 
 #include "dynamic_node.h"
-#include "core/math/math_funcs.h"
 #include "core/object/callable_method_pointer.h"
 #include "core/object/object.h"
 #include "core/os/memory.h"
@@ -40,13 +39,9 @@
 #include "core/variant/callable.h"
 #include "core/variant/dictionary.h"
 #include "core/variant/variant.h"
-#include "scene/gui/container.h"
 #include "scene/main/node.h"
 #include "scene/main/scene_tree.h"
 #include "editor/docks/inspector_dock.h"
-
-HashMap<SceneTree*, int> DynamicNode::_used_size;
-HashMap<SceneTree*, List<int>> DynamicNode::_unused_id_map;
 
 static LocalVector<int> DontWantAncestors;
 static Node* get_ancestor(Node *node, int distance, LocalVector<int> &ancestors = DontWantAncestors) {
@@ -114,19 +109,6 @@ static void set_descendants_dynamic_root(Node *p_node, Node* p_dynamic_root) {
 	}
 }
 
-void DynamicNode::set_shadow_node_recursive(Node *p_node, Node* p_shadow_node) {
-	// p_node->set_shadow_node(p_shadow_node);
-	// for (int i = 0; i < p_node->get_child_count(); i++) {
-	// 	set_shadow_node_recursive(p_node->get_child(i), p_shadow_node->get_child(i));
-	// }
-}
-void DynamicNode::inside_shadow_tree_recursive(Node *p_node, bool p_is_inside) {
-	// p_node->is_inside_shadow_tree = p_is_inside;
-	// for (int i = 0; i < p_node->get_child_count(); i++) {
-	// 	inside_shadow_tree_recursive(p_node->get_child(i), p_is_inside);
-	// }
-}
-
 #define INDEX_HANDLE													\
 	unsigned int index = p_index < 0 ? list.size() + p_index : p_index;	\
 	CRASH_BAD_INDEX(index, list.size());
@@ -171,29 +153,6 @@ static int flags_replica = Node::DUPLICATE_SIGNALS | Node::DUPLICATE_GROUPS | No
 void DynamicNode::on_distribute(Vector<Operation> p_operations) {
 	_operations = p_operations;
 	queue_update();
-}
-
-void DynamicNode::patch_top_node_cache(int p_unit_pos, Node *p_node, TreeModifyType p_type) {
-	Node *tpl_node = _tpl_remap[p_node];
-
-	switch (p_type) {
-		case ENTERING: {
-			Node *tpl_node = _tpl_remap[p_node];
-			Vector<Node*> &pool = access_top_node(tpl_node);
-			if (pool.size() <= p_unit_pos) {
-				pool.resize(p_unit_pos + 1);
-				pool.set(p_unit_pos, p_node);
-			} else if (!pool[p_unit_pos]) {
-				pool.set(p_unit_pos, p_node);
-			}
-		} break;
-
-		case EXITING: {
-			remove_top_node(tpl_node, p_unit_pos);
-		} break;
-
-		default: break;
-	}
 }
 
 void DynamicNode::perform_tree_operations_for_template_node() {
@@ -459,31 +418,22 @@ void DynamicNode::collect_tree_operations(Node* p_node, TreeModifyType p_modify_
 
 }
 
-// filter modified for descendant
 void DynamicNode::_node_tree_modify(Node *p_node, TreeModifyType p_modify_type, int p_index, Node *p_parent) {
 	if (_ignore_tree_mutated.has(p_node)) { _ignore_tree_mutated.erase(p_node); return; }
 
 	int distance;
-	Node *ancestor;
 	LocalVector<int> ancestors;
 
 	if (p_modify_type == ENTERING) {
 		distance = p_parent->_get_scene_tree_depth() - _get_scene_tree_depth() + 1;
-		ancestor = get_ancestor(p_parent, distance - 1, ancestors);
+		get_ancestor(p_parent, distance - 1, ancestors);
 		ancestors.push_back(p_parent->get_index());
 	} else {
 		distance = p_node->_get_scene_tree_depth() - _get_scene_tree_depth();
-		ancestor = get_ancestor(p_node, distance, ancestors);
+		get_ancestor(p_node, distance, ancestors);
 	}
 
-
-	// bool is_source_dynamic_node = get_closest_daynamic_ancestor(p_node, distance) == this;
-
-	if (distance > 0
-		// && ancestor == this
-		// // && is_source_dynamic_node
-		// && (p_node->is_daynamic_type(Node::DYNAMIC_REPLICA))
-	) {
+	if (distance > 0) {
 		collect_tree_operations(p_node, p_modify_type, p_index, ancestors);
 		queue_update();
 	}
@@ -497,20 +447,6 @@ _FORCE_INLINE_ Vector<Node *>& DynamicNode::access_top_node(Node *p_tpl_node) {
 	Vector<Node *> &pool = _top_node_pool_map[p_tpl_node];
 
 	return pool;
-}
-
-_FORCE_INLINE_ void DynamicNode::remove_top_node(Node *p_tpl_node, int p_index) {
-	// TODO: 考虑换成断言？
-	if (!_top_node_pool_map.has(p_tpl_node)) {
-		return;
-	}
-
-	Vector<Node *> &pool = _top_node_pool_map[p_tpl_node];
-	if (pool.size() == 1) {
-		_top_node_pool_map.erase(p_tpl_node);
-	} else {
-		pool.remove_at(p_index);
-	}
 }
 
 void DynamicNode::_queue_update_callback() {
@@ -548,7 +484,6 @@ void DynamicNode::_queue_update_callback() {
 	}
 
 	HashMap<Node *, Node *> opr_top_tpl_remap;
-	// perform_tree_operations(-1, opr_top_tpl_remap);
 	perform_tree_operations_for_template_node();
 
 	int desire_tpls = template_root->get_child_count(true);
@@ -568,20 +503,12 @@ void DynamicNode::_queue_update_callback() {
 
 	for (int unit_pos = 0; unit_pos < max_units; unit_pos++) {
 		if (_mutating_unit == unit_pos) {
-			// for (Operation &opr : _operations) {
-			// 	if ((opr.type == ENTERING && opr.path.size() == 1) || (opr.type != ENTERING && opr.path.size() == 2)) {
-			// 		patch_top_node_cache(unit_pos, opr.node, opr.type);
-			// 	}
-			// }
 			continue;
 		}
 
 		perform_tree_operations(unit_pos, opr_top_tpl_remap);
 		for(int tpl_pos = 0; tpl_pos < template_root->get_child_count(true); tpl_pos++) {
 			Node *tpl_top_node = template_root->get_child(tpl_pos, true);
-
-			// TODO: 如何为刚添加的 top_node 增加 top_pool_cache
-
 			Vector<Node *> &top_node_pool = access_top_node(tpl_top_node);
 
 			if (unit_pos < desire_units) {
@@ -599,7 +526,7 @@ void DynamicNode::_queue_update_callback() {
 				int remove_index_start = desire_units;
 				Node *top_node = top_node_pool[remove_index_start];
 				_tpl_remap.erase(top_node);
-				remove_top_node(tpl_top_node, remove_index_start);
+				access_top_node(tpl_top_node).remove_at(remove_index_start);
 
 				_ignore_tree_mutated.insert(top_node);
 				top_node->remove();
@@ -611,30 +538,12 @@ void DynamicNode::_queue_update_callback() {
 	_mutating_unit = -1;
 	_prev_units = _units;
 	_prev_tops = desire_tpls;
-	_exiting_tpl_top_nodes.clear();
-	_modify_data_map.clear();
-	_dirty_descendants_map.clear();
-	_top_node_dirty.clear();
 	_operations.clear();
 	_exited_nodes.clear();
 	_entered_nodes.clear();
-	_mutate_top_node_from_operation.clear();
-	_ignore_perform_tree_operations.clear();
-	_skip_first = false;
-	_top_node_unit_index_map.clear();
 
 	_unit_mutating_type = UNINITIALIZE;
 }
-
-// void DynamicNode::sync_for_add_child(Node *p_child) {
-// 	Operation opr {SceneTree::Enter, p_child};
-// };
-// void DynamicNode::sync_for_remove_child(Node *p_child) {
-
-// };
-// void DynamicNode::sync_for_move_child(Node *p_child, int p_index) {
-
-// };
 
 void DynamicNode::queue_update(){
 	callable_mp(this, &DynamicNode::_queue_update_callback).call_deferred();
@@ -660,11 +569,6 @@ void DynamicNode::_tree_entered() {
 
 void DynamicNode::_tree_exiting() {
 	InspectorDock::get_inspector_singleton()->disconnect("property_edited", callable_mp(this, &DynamicNode::_inspector_prop_edited));
-}
-
-void DynamicNode::_clear_replicas() {
-	_top_node_pool_map.clear();
-	_tpl_top_nodes.clear();
 }
 
 void DynamicNode::_inspector_prop_edited(const String &p_property) {
