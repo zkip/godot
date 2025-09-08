@@ -124,6 +124,42 @@ public:
 		AUTO_TRANSLATE_MODE_DISABLED,
 	};
 
+	enum DynamicType {
+		DYNAMIC_REPLICA =	1 << 0, // 1: replica, 0: template
+		DYNAMIC_TOP_NODE =	1 << 2,
+
+		DYNAMIC_MASK_NON_TOP =	DYNAMIC_REPLICA,
+	};
+
+	bool is_dynamic_type(DynamicType p_dynamic_type) const {
+		return p_dynamic_type & data.dynamic_type;
+	};
+	int get_dynamic_type(DynamicType p_dynamic_type) const {
+		return data.dynamic_type;
+	};
+	bool is_dynamic_root() const {
+		return data.dynamic_root == this;
+	};
+	bool is_template_root() const {
+		return data.dynamic_root && data.dynamic_root->data.template_root == this;
+	};
+
+	void set_dynamic_type(DynamicType p_dynamic_type) {
+		data.dynamic_type = p_dynamic_type;
+	};
+	void set_dynamic_root(Node *p_dynamic_root) {
+		data.dynamic_root = p_dynamic_root;
+	};
+	void set_template_root(Node *p_template_root) {
+		data.template_root = p_template_root;
+	};
+	void set_inside_template_tree(bool p_inside_template_tree) {
+		data.inside_template_tree = p_inside_template_tree;
+	};
+	bool get_inside_template_tree(bool p_inside_template_tree) {
+		return data.inside_template_tree;
+	};
+
 	struct Comparator {
 		bool operator()(const Node *p_a, const Node *p_b) const { return p_b->is_greater_than(p_a); }
 	};
@@ -163,6 +199,11 @@ private:
 		String scene_file_path;
 		Ref<SceneState> instance_state;
 		Ref<SceneState> inherited_state;
+
+		int dynamic_type = 0;
+		Node *dynamic_root = nullptr;
+		Node *template_root = nullptr;
+		bool inside_template_tree = false;
 
 		Node *parent = nullptr;
 		Node *owner = nullptr;
@@ -370,7 +411,6 @@ protected:
 
 	void _set_use_identity_transform(bool p_enable) { data.use_identity_transform = p_enable; }
 	bool _is_using_identity_transform() const { return data.use_identity_transform; }
-	int32_t _get_scene_tree_depth() const { return data.depth; }
 
 	//call from SceneTree
 	void _call_input(const Ref<InputEvent> &p_event);
@@ -484,12 +524,16 @@ public:
 	void add_sibling(Node *p_sibling, bool p_force_readable_name = false);
 	void remove_child(Node *p_child);
 
+	void append_to(Node *p_parent, bool p_force_readable_name = false, InternalMode p_internal = INTERNAL_MODE_DISABLED);
+	void remove();
+	void move_to(int p_index);
+
 	int get_child_count(bool p_include_internal = true) const;
 	Node *get_child(int p_index, bool p_include_internal = true) const;
 	TypedArray<Node> get_children(bool p_include_internal = true) const;
 	bool has_node(const NodePath &p_path) const;
 	Node *get_node(const NodePath &p_path) const;
-	Node *get_node_or_null(const NodePath &p_path) const;
+	Node *get_node_or_null(const NodePath &p_path, bool p_prefer_template = false) const;
 	Node *find_child(const String &p_pattern, bool p_recursive = true, bool p_owned = true) const;
 	TypedArray<Node> find_children(const String &p_pattern, const String &p_type = "", bool p_recursive = true, bool p_owned = true) const;
 	bool has_node_and_resource(const NodePath &p_path) const;
@@ -565,6 +609,7 @@ public:
 			return -1;
 		}
 	}
+	int32_t _get_scene_tree_depth() const { return data.depth; }
 
 	Ref<Tween> create_tween();
 

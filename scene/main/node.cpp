@@ -29,6 +29,8 @@
 /**************************************************************************/
 
 #include "node.h"
+#include "core/object/object.h"
+#include "dynamic_node.h"
 #include "node.compat.inc"
 
 #include "core/config/project_settings.h"
@@ -377,6 +379,8 @@ void Node::_propagate_after_exit_tree() {
 		}
 	}
 
+	data.inside_template_tree = false;
+
 	data.blocked++;
 
 	for (HashMap<StringName, Node *>::Iterator I = data.children.last(); I; --I) {
@@ -511,6 +515,10 @@ void Node::move_child(Node *p_child, int p_index) {
 
 void Node::_move_child(Node *p_child, int p_index, bool p_ignore_end) {
 	ERR_FAIL_COND_MSG(data.blocked > 0, "Parent node is busy setting up children, `move_child()` failed. Consider using `move_child.call_deferred(child, index)` instead (or `popup.call_deferred()` if this is from a popup).");
+
+	if (data.dynamic_root) {
+		Object::cast_to<DynamicNode>(data.dynamic_root)->_node_tree_modify(p_child, DynamicNode::MOVING, p_index, this);
+	}
 
 	// Specifying one place beyond the end
 	// means the same as moving to the last index
@@ -1639,6 +1647,15 @@ Node::InternalMode Node::get_internal_mode() const {
 void Node::_add_child_nocheck(Node *p_child, const StringName &p_name, InternalMode p_internal_mode) {
 	//add a child node quickly, without name validation
 
+	if (data.dynamic_root && !is_template_root()) {
+		Object::cast_to<DynamicNode>(data.dynamic_root)->_node_tree_modify(p_child, DynamicNode::ENTERING,  -1, this);
+		if (!p_child->data.dynamic_root) {
+			p_child->data.dynamic_root = data.dynamic_root;
+		}
+	}
+
+	p_child->data.inside_template_tree = data.inside_template_tree;
+
 	p_child->data.name = p_name;
 	data.children.insert(p_name, p_child);
 
@@ -1662,6 +1679,12 @@ void Node::_add_child_nocheck(Node *p_child, const StringName &p_name, InternalM
 		data.children_cache.push_back(p_child);
 	} else {
 		data.children_cache_dirty = true;
+	}
+
+	p_child->data.dynamic_type |= data.dynamic_type & DYNAMIC_MASK_NON_TOP;
+
+	if (data.dynamic_root) {
+		p_child->data.dynamic_type |= DYNAMIC_TOP_NODE;
 	}
 
 	p_child->notification(NOTIFICATION_PARENTED);
@@ -1712,11 +1735,28 @@ void Node::add_sibling(Node *p_sibling, bool p_force_readable_name) {
 	data.parent->_move_child(p_sibling, get_index() + 1);
 }
 
+void Node::remove() {
+	data.parent->remove_child(this);
+}
+
+void Node::append_to(Node *p_parent, bool p_force_readable_name, InternalMode p_internal) {
+	p_parent->add_child(this, p_force_readable_name, p_internal);
+}
+
+void Node::move_to(int p_index) {
+	data.parent->move_child(this, p_index);
+}
+
 void Node::remove_child(Node *p_child) {
 	ERR_FAIL_COND_MSG(data.tree && !Thread::is_main_thread(), "Removing children from a node inside the SceneTree is only allowed from the main thread. Use call_deferred(\"remove_child\",node).");
 	ERR_FAIL_NULL(p_child);
 	ERR_FAIL_COND_MSG(data.blocked > 0, "Parent node is busy adding/removing children, `remove_child()` can't be called at this time. Consider using `remove_child.call_deferred(child)` instead.");
 	ERR_FAIL_COND(p_child->data.parent != this);
+
+	if (data.dynamic_root) {
+		Object::cast_to<DynamicNode>(data.dynamic_root)->_node_tree_modify(p_child, DynamicNode::EXITING,  p_child->get_index(), this);
+		p_child->data.dynamic_root = nullptr;
+	}
 
 	/**
 	 *  Do not change the data.internal_children*cache counters here.
@@ -1746,7 +1786,7 @@ void Node::remove_child(Node *p_child) {
 	notification(NOTIFICATION_CHILD_ORDER_CHANGED);
 	emit_signal(SNAME("child_order_changed"));
 
-	if (data.tree) {
+	if (data.tree || data.inside_template_tree) {
 		p_child->_propagate_after_exit_tree();
 	}
 }
@@ -1833,7 +1873,7 @@ Node *Node::_get_child_by_name(const StringName &p_name) const {
 	}
 }
 
-Node *Node::get_node_or_null(const NodePath &p_path) const {
+Node *Node::get_node_or_null(const NodePath &p_path, bool p_prefer_template) const {
 	ERR_THREAD_GUARD_V(nullptr);
 	if (p_path.is_empty()) {
 		return nullptr;
@@ -1887,6 +1927,11 @@ Node *Node::get_node_or_null(const NodePath &p_path) const {
 				next = const_cast<Node *>(*node);
 			} else {
 				return nullptr;
+			}
+		}
+		if (p_prefer_template) {
+			if (next->is_dynamic_root()) {
+				next = next->data.template_root;
 			}
 		}
 		current = next;
@@ -3721,7 +3766,7 @@ void Node::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_child", "idx", "include_internal"), &Node::get_child, DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("has_node", "path"), &Node::has_node);
 	ClassDB::bind_method(D_METHOD("get_node", "path"), &Node::get_node);
-	ClassDB::bind_method(D_METHOD("get_node_or_null", "path"), &Node::get_node_or_null);
+	ClassDB::bind_method(D_METHOD("get_node_or_null", "path", "prefer_template"), &Node::get_node_or_null);
 	ClassDB::bind_method(D_METHOD("get_parent"), &Node::get_parent);
 	ClassDB::bind_method(D_METHOD("find_child", "pattern", "recursive", "owned"), &Node::find_child, DEFVAL(true), DEFVAL(true));
 	ClassDB::bind_method(D_METHOD("find_children", "pattern", "type", "recursive", "owned"), &Node::find_children, DEFVAL(""), DEFVAL(true), DEFVAL(true));
