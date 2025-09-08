@@ -380,6 +380,9 @@ void Node::_propagate_after_exit_tree() {
 	}
 
 	data.inside_template_tree = false;
+	if (!is_template_root()) {
+		data.template_root = nullptr;
+	}
 
 	data.blocked++;
 
@@ -1647,7 +1650,7 @@ Node::InternalMode Node::get_internal_mode() const {
 void Node::_add_child_nocheck(Node *p_child, const StringName &p_name, InternalMode p_internal_mode) {
 	//add a child node quickly, without name validation
 
-	if (data.dynamic_root && !is_template_root()) {
+	if (data.dynamic_root && !data.inside_template_tree) {
 		Object::cast_to<DynamicNode>(data.dynamic_root)->_node_tree_modify(p_child, DynamicNode::ENTERING,  -1, this);
 		if (!p_child->data.dynamic_root) {
 			p_child->data.dynamic_root = data.dynamic_root;
@@ -1655,6 +1658,9 @@ void Node::_add_child_nocheck(Node *p_child, const StringName &p_name, InternalM
 	}
 
 	p_child->data.inside_template_tree = data.inside_template_tree;
+	if (!p_child->data.template_root) {
+		p_child->data.template_root = data.template_root;
+	}
 
 	p_child->data.name = p_name;
 	data.children.insert(p_name, p_child);

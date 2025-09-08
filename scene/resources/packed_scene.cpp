@@ -466,7 +466,7 @@ Node *SceneState::instantiate(GenEditState p_edit_state) const {
 						bool pending_add = true;
 						Node *parent_template_node = parent;
 						if (parent->is_dynamic_root()) {
-							parent_template_node = Object::cast_to<DynamicNode>(parent)->get_template_root();
+							parent_template_node = parent->get_template_root();
 						}
 #ifdef TOOLS_ENABLED
 						if (Engine::get_singleton()->is_editor_hint()) {
@@ -516,12 +516,16 @@ Node *SceneState::instantiate(GenEditState p_edit_state) const {
 				node->set_name(old_parent_path + "#" + node->get_name());
 			}
 
-			if (n.owner >= 0) {
-				NODE_FROM_ID(owner, n.owner);
-				if (owner) {
-					node->_set_owner_nocheck(owner);
-					if (node->data.unique_name_in_owner) {
-						node->_acquire_unique_name_in_owner();
+			if (node->get_inside_template_tree()) {
+				node->_set_owner_nocheck(node->get_template_root());
+			} else {
+				if (n.owner >= 0) {
+					NODE_FROM_ID(owner, n.owner);
+					if (owner) {
+						node->_set_owner_nocheck(owner);
+						if (node->data.unique_name_in_owner) {
+							node->_acquire_unique_name_in_owner();
+						}
 					}
 				}
 			}
@@ -1051,9 +1055,11 @@ Error SceneState::_parse_node(Node *p_owner, Node *p_node, int p_parent_idx, Has
 		nodes.push_back(nd);
 	}
 
-	for (int i = 0; i < p_node->get_child_count(); i++) {
-		Node *c = p_node->get_child(i);
-		Error err = _parse_node(p_owner, c, parent_node, name_map, variant_map, node_map, nodepath_map);
+	Node *persist_node = p_node->is_dynamic_root() ? p_node->get_template_root() : p_node;
+	Node *persist_owner = p_node->is_dynamic_root() ? persist_node : p_owner;
+	for (int i = 0; i < persist_node->get_child_count(); i++) {
+		Node *c = persist_node->get_child(i);
+		Error err = _parse_node(persist_owner, c, parent_node, name_map, variant_map, node_map, nodepath_map);
 		if (err) {
 			return err;
 		}

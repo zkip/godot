@@ -141,7 +141,7 @@ public:
 		return data.dynamic_root == this;
 	};
 	bool is_template_root() const {
-		return data.dynamic_root && data.dynamic_root->data.template_root == this;
+		return data.template_root == this;
 	};
 
 	void set_dynamic_type(DynamicType p_dynamic_type) {
@@ -156,8 +156,11 @@ public:
 	void set_inside_template_tree(bool p_inside_template_tree) {
 		data.inside_template_tree = p_inside_template_tree;
 	};
-	bool get_inside_template_tree(bool p_inside_template_tree) {
+	bool get_inside_template_tree() {
 		return data.inside_template_tree;
+	};
+	Node* get_template_root() {
+		return data.template_root;
 	};
 
 	struct Comparator {

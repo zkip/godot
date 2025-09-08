@@ -222,15 +222,18 @@ void DynamicNode::perform_tree_operations_for_template_node() {
 				// 当sub提升为top时，在处理template时统一生成所有的node并和tpl联系起来，遍历replica时不生成而是直接使用
 				access_top_node(tpl_node).resize(_units);
 				Operation *exited_opr = _exited_nodes.size() > 0 ? &_operations[0] : nullptr;
-				LocalVector<int> exited_opr_path = exited_opr->path;
+
+				LocalVector<int> exited_opr_path;
+				if (exited_opr) { exited_opr_path = exited_opr->path; }
+
 				for (int i = 0; i < _units; i++) {
 					Node *replica_node = nullptr;
 
 					if (i == _mutating_unit) {
 						replica_node = opr.node;
-						if (_unit_mutating_type == ENTERING) {
+						if (_unit_mutating_type == ENTERING && exited_opr) {
 							exited_opr_path[1] += 1;
-						} else if (_unit_mutating_type == EXITING) {
+						} else if (_unit_mutating_type == EXITING && exited_opr) {
 							exited_opr_path[1] -= 1;
 						}
 					} else if(_exited_nodes.has(opr.node)) {
@@ -239,7 +242,9 @@ void DynamicNode::perform_tree_operations_for_template_node() {
 						replica_node = opr.node->duplicate(flags_replica);
 					}
 
-					exited_opr_path[1] += _prev_tops;
+					if (exited_opr) {
+						exited_opr_path[1] += _prev_tops;
+					}
 					Vector<Node *> &pool = access_top_node(tpl_node);
 					pool.set(i, replica_node);
 					_tpl_remap[replica_node] = tpl_node;
@@ -679,8 +684,10 @@ void DynamicNode::_inspector_prop_edited(const String &p_property) {
 }
 
 DynamicNode::DynamicNode() {
+	// TODO: 使构造 template_root 的过程成为 Node::CreateTemplateRoot
 	template_root = memnew(Node);
 	template_root->set_inside_template_tree(true);
+	template_root->set_template_root(template_root);
 	template_root->set_dynamic_root(this);
 	set_dynamic_root(this);
 	set_template_root(template_root);
