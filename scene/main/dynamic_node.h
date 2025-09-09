@@ -111,6 +111,10 @@ private:
 
 public:
 	void request_mutate_tree(Node *p_node, TreeModifyType p_modify_type, int p_index, Node *p_parent);
+
+	int get_unit_index(int p_index) {
+		return p_index / _prev_tops;
+	};
 };
 
 VARIANT_ENUM_CAST(DynamicNode::TreeModifyType);

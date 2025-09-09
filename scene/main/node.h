@@ -153,9 +153,7 @@ public:
 	void set_template_root(Node *p_template_root) {
 		data.template_root = p_template_root;
 	};
-	void set_inside_template_tree(bool p_inside_template_tree) {
-		data.inside_template_tree = p_inside_template_tree;
-	};
+	void set_inside_template_tree(bool p_inside_template_tree, bool p_recursive = true);
 	bool get_inside_template_tree() {
 		return data.inside_template_tree;
 	};

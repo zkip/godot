@@ -380,7 +380,7 @@ void Node::_propagate_after_exit_tree() {
 	}
 
 	data.inside_template_tree = false;
-	if (!is_template_root()) {
+	if (!is_dynamic_root()) {
 		data.template_root = nullptr;
 	}
 
@@ -1647,6 +1647,16 @@ Node::InternalMode Node::get_internal_mode() const {
 	return data.internal_mode;
 }
 
+void Node::set_inside_template_tree(bool p_inside_template_tree, bool p_recursive) {
+	data.inside_template_tree = p_inside_template_tree;
+
+	if (p_recursive) {
+		for (KeyValue<StringName, Node *> &K : data.children) {
+			K.value->set_inside_template_tree(p_inside_template_tree, p_recursive);
+		}
+	}
+};
+
 void Node::_add_child_nocheck(Node *p_child, const StringName &p_name, InternalMode p_internal_mode) {
 	//add a child node quickly, without name validation
 
@@ -1657,7 +1667,9 @@ void Node::_add_child_nocheck(Node *p_child, const StringName &p_name, InternalM
 		}
 	}
 
-	p_child->data.inside_template_tree = data.inside_template_tree;
+	if (data.inside_template_tree) {
+		p_child->set_inside_template_tree(true);
+	}
 	if (!p_child->data.template_root) {
 		p_child->data.template_root = data.template_root;
 	}
@@ -1694,7 +1706,6 @@ void Node::_add_child_nocheck(Node *p_child, const StringName &p_name, InternalM
 	}
 
 	p_child->notification(NOTIFICATION_PARENTED);
-
 	if (data.tree) {
 		p_child->_set_tree(data.tree);
 	}
