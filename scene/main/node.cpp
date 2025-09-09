@@ -520,7 +520,7 @@ void Node::_move_child(Node *p_child, int p_index, bool p_ignore_end) {
 	ERR_FAIL_COND_MSG(data.blocked > 0, "Parent node is busy setting up children, `move_child()` failed. Consider using `move_child.call_deferred(child, index)` instead (or `popup.call_deferred()` if this is from a popup).");
 
 	if (data.dynamic_root) {
-		Object::cast_to<DynamicNode>(data.dynamic_root)->_node_tree_modify(p_child, DynamicNode::MOVING, p_index, this);
+		Object::cast_to<DynamicNode>(data.dynamic_root)->request_mutate_tree(p_child, DynamicNode::MOVING, p_index, this);
 	}
 
 	// Specifying one place beyond the end
@@ -1651,7 +1651,7 @@ void Node::_add_child_nocheck(Node *p_child, const StringName &p_name, InternalM
 	//add a child node quickly, without name validation
 
 	if (data.dynamic_root && !data.inside_template_tree) {
-		Object::cast_to<DynamicNode>(data.dynamic_root)->_node_tree_modify(p_child, DynamicNode::ENTERING,  -1, this);
+		Object::cast_to<DynamicNode>(data.dynamic_root)->request_mutate_tree(p_child, DynamicNode::ENTERING,  -1, this);
 		if (!p_child->data.dynamic_root) {
 			p_child->data.dynamic_root = data.dynamic_root;
 		}
@@ -1760,7 +1760,7 @@ void Node::remove_child(Node *p_child) {
 	ERR_FAIL_COND(p_child->data.parent != this);
 
 	if (data.dynamic_root) {
-		Object::cast_to<DynamicNode>(data.dynamic_root)->_node_tree_modify(p_child, DynamicNode::EXITING,  p_child->get_index(), this);
+		Object::cast_to<DynamicNode>(data.dynamic_root)->request_mutate_tree(p_child, DynamicNode::EXITING,  p_child->get_index(), this);
 		p_child->data.dynamic_root = nullptr;
 	}
 

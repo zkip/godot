@@ -77,15 +77,12 @@ private:
 
 	struct Operation {
 		Node *node;
-		LocalVector<Node *> removing_nodes;
 		LocalVector<int> path;
 		int top_index;
 		int target_index;
 		String property = "";
 		TreeModifyType type = TreeModifyType::UNINITIALIZE;
 	};
-
-	Node *template_root = nullptr;
 
 	void collect_tree_operations(Node *node, TreeModifyType p_modify_type, int p_index, const LocalVector<int> &p_ancestors, const String &p_property = "");
 	void perform_tree_operations(int p_unit_pos, HashMap<Node *, Node *> &opr_node_tpl_remap);
@@ -113,11 +110,7 @@ private:
 	void _inspector_prop_edited(const String &p_property);
 
 public:
-	void _node_tree_modify(Node *p_node, TreeModifyType p_modify_type, int p_index, Node *p_parent);
-
-	Node* get_template_root() const {
-		return template_root;
-	}
+	void request_mutate_tree(Node *p_node, TreeModifyType p_modify_type, int p_index, Node *p_parent);
 };
 
 VARIANT_ENUM_CAST(DynamicNode::TreeModifyType);

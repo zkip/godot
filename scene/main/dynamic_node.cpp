@@ -148,6 +148,18 @@ _FORCE_INLINE_ static Vector<T> vector_append(const Vector<T> list, T value) {
 	return new_list;
 }
 
+// int DynamicNode::node_index_to_unit_pos(int p_index, Node *p_in_this_node_unit) {
+// 	if (!p_in_this_node_unit) {
+// 		return p_index % _prev_tops;
+// 	}
+
+// 	int unit_index = p_in_this_node_unit->get_index() / _prev_tops;
+// 	int unit_start = unit_index * _prev_tops;
+// 	int unit_pos = p_index - unit_start;
+
+// 	return unit_pos;
+// }
+
 static int flags_replica = Node::DUPLICATE_SIGNALS | Node::DUPLICATE_GROUPS | Node::DUPLICATE_SCRIPTS | Node::DUPLICATE_FROM_EDITOR;
 
 void DynamicNode::on_distribute(Vector<Operation> p_operations) {
@@ -160,7 +172,7 @@ void DynamicNode::perform_tree_operations_for_template_node() {
 
 	for (Operation &opr : _operations) {
 		LocalVector<int> path = opr.path;
-		Node *terminal_node = get_descendant(template_root, path, 1, 0);
+		Node *terminal_node = get_descendant(get_template_root(), path, 1, 0);
 
 		switch (opr.type) {
 			case ENTERING: {
@@ -174,7 +186,7 @@ void DynamicNode::perform_tree_operations_for_template_node() {
 
 				_ignore_tree_mutated.insert(tpl_node);
 				tpl_node->append_to(terminal_node);
-				set_owner_recursive(tpl_node, template_root);
+				set_owner_recursive(tpl_node, get_template_root());
 
 				if (opr.path.size() > 1) { break; }
 
@@ -248,7 +260,7 @@ void DynamicNode::perform_tree_operations(int p_unit_pos, HashMap<Node *, Node *
 	LocalVector<Node *> target_parents;
 	LocalVector<Node *> source_nodes;
 
-	int unit_size = template_root->get_child_count();
+	int unit_size = get_template_root()->get_child_count();
 	Node *owner = get_owner();
 	int top_offset = unit_size * p_unit_pos;
 
@@ -371,7 +383,7 @@ void DynamicNode::collect_tree_operations(Node* p_node, TreeModifyType p_modify_
 	}
 
 	if (p_ancestors.size() == 1) {
-		int current_unit_size = template_root->get_child_count();
+		int current_unit_size = get_template_root()->get_child_count();
 		if (p_modify_type == ENTERING) {
 			_unit_mutating_type = ENTERING;
 			_unit_mutate_index = current_unit_size;
@@ -394,18 +406,6 @@ void DynamicNode::collect_tree_operations(Node* p_node, TreeModifyType p_modify_
 	operation.target_index = target_index;
 	operation.top_index = top_index;
 
-	if (p_modify_type == EXITING) {
-		LocalVector<Node *> removing_nodes;
-		removing_nodes.resize(_units);
-
-		LocalVector<int> start_path = path;
-		for (int i = 0; i < _units; i++) {
-			removing_nodes[i] = get_descendant(this, start_path, 1, 0);
-			start_path[1] += template_root->get_child_count();
-		}
-		operation.removing_nodes = removing_nodes;
-	}
-
 	if (p_modify_type == ENTERING) {
 		_entered_nodes[p_node] = _operations.size();
 	} else if (p_modify_type == EXITING) {
@@ -418,7 +418,7 @@ void DynamicNode::collect_tree_operations(Node* p_node, TreeModifyType p_modify_
 
 }
 
-void DynamicNode::_node_tree_modify(Node *p_node, TreeModifyType p_modify_type, int p_index, Node *p_parent) {
+void DynamicNode::request_mutate_tree(Node *p_node, TreeModifyType p_modify_type, int p_index, Node *p_parent) {
 	if (_ignore_tree_mutated.has(p_node)) { _ignore_tree_mutated.erase(p_node); return; }
 
 	int distance;
@@ -486,7 +486,7 @@ void DynamicNode::_queue_update_callback() {
 	HashMap<Node *, Node *> opr_top_tpl_remap;
 	perform_tree_operations_for_template_node();
 
-	int desire_tpls = template_root->get_child_count(true);
+	int desire_tpls = get_template_root()->get_child_count(true);
 
 	// patch for extra move_to operation
 	for (unsigned int i = 0; i < _operations.size(); i++) {
@@ -507,8 +507,8 @@ void DynamicNode::_queue_update_callback() {
 		}
 
 		perform_tree_operations(unit_pos, opr_top_tpl_remap);
-		for(int tpl_pos = 0; tpl_pos < template_root->get_child_count(true); tpl_pos++) {
-			Node *tpl_top_node = template_root->get_child(tpl_pos, true);
+		for(int tpl_pos = 0; tpl_pos < get_template_root()->get_child_count(true); tpl_pos++) {
+			Node *tpl_top_node = get_template_root()->get_child(tpl_pos, true);
 			Vector<Node *> &top_node_pool = access_top_node(tpl_top_node);
 
 			if (unit_pos < desire_units) {
@@ -589,7 +589,7 @@ void DynamicNode::_inspector_prop_edited(const String &p_property) {
 
 DynamicNode::DynamicNode() {
 	// TODO: 使构造 template_root 的过程成为 Node::CreateTemplateRoot
-	template_root = memnew(Node);
+	Node *template_root = memnew(Node);
 	template_root->set_inside_template_tree(true);
 	template_root->set_template_root(template_root);
 	template_root->set_dynamic_root(this);
@@ -601,7 +601,7 @@ DynamicNode::DynamicNode() {
 }
 
 DynamicNode::~DynamicNode() {
-	memdelete(template_root);
+	memdelete(get_template_root());
 
 	disconnect(SceneStringName(tree_entered), callable_mp(this, &DynamicNode::_tree_entered));
 	disconnect(SceneStringName(tree_exiting), callable_mp(this, &DynamicNode::_tree_exiting));
