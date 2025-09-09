@@ -545,8 +545,10 @@ Node *SceneState::instantiate(GenEditState p_edit_state) const {
 		ret_nodes[i] = node;
 
 		if (node && gen_node_path_cache && ret_nodes[0]) {
-			NodePath n2 = ret_nodes[0]->get_path_to(node);
-			node_path_cache[n2] = i;
+			if (!node->get_inside_template_tree()) {
+				NodePath n2 = ret_nodes[0]->get_path_to(node);
+				node_path_cache[n2] = i;
+			}
 		}
 	}
 
