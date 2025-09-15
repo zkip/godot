@@ -95,6 +95,7 @@
 #include "scene/gui/video_stream_player.h"
 #include "scene/main/canvas_item.h"
 #include "scene/main/canvas_layer.h"
+#include "scene/main/dynamic_node.h"
 #include "scene/main/http_request.h"
 #include "scene/main/instance_placeholder.h"
 #include "scene/main/missing_node.h"
@@ -413,6 +414,7 @@ void register_scene_types() {
 	GDREGISTER_CLASS(Object);
 
 	GDREGISTER_CLASS(Node);
+	GDREGISTER_CLASS(DynamicNode);
 	GDREGISTER_VIRTUAL_CLASS(MissingNode);
 	GDREGISTER_ABSTRACT_CLASS(InstancePlaceholder);
 

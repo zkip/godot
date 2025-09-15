@@ -33,9 +33,11 @@
 #include "core/config/engine.h"
 #include "core/io/missing_resource.h"
 #include "core/io/resource_loader.h"
+#include "core/object/object.h"
 #include "core/templates/local_vector.h"
 #include "scene/2d/node_2d.h"
 #include "scene/gui/control.h"
+#include "scene/main/dynamic_node.h"
 #include "scene/main/instance_placeholder.h"
 #include "scene/main/missing_node.h"
 #include "scene/property_utils.h"
@@ -132,7 +134,7 @@ Node *SceneState::instantiate(GenEditState p_edit_state) const {
 	Node *p_name;                                        \
 	if (p_id & FLAG_ID_IS_PATH) {                        \
 		NodePath np = node_paths[p_id & FLAG_MASK];      \
-		p_name = ret_nodes[0]->get_node_or_null(np);     \
+		p_name = ret_nodes[0]->get_node_or_null(np, true);     \
 	} else {                                             \
 		ERR_FAIL_INDEX_V(p_id & FLAG_MASK, nc, nullptr); \
 		p_name = ret_nodes[p_id & FLAG_MASK];            \
@@ -462,6 +464,10 @@ Node *SceneState::instantiate(GenEditState p_edit_state) const {
 				if (i > 0) {
 					if (parent) {
 						bool pending_add = true;
+						Node *parent_template_node = parent;
+						if (parent->is_dynamic_root()) {
+							parent_template_node = parent->get_template_root();
+						}
 #ifdef TOOLS_ENABLED
 						if (Engine::get_singleton()->is_editor_hint()) {
 							Node *existing = parent->_get_child_by_name(snames[n.name]);
@@ -480,16 +486,16 @@ Node *SceneState::instantiate(GenEditState p_edit_state) const {
 											ret_nodes[0]->get_path_to(existing)));
 								}
 								node->set_name(snames[n.name]);
-								parent->add_child(node, true);
+								parent_template_node->add_child(node, true);
 								pending_add = false;
 							}
 						}
 #endif
 						if (pending_add) {
-							parent->_add_child_nocheck(node, snames[n.name]);
+							parent_template_node->_add_child_nocheck(node, snames[n.name]);
 						}
-						if (n.index >= 0 && n.index < parent->get_child_count() - 1) {
-							parent->move_child(node, n.index);
+						if (n.index >= 0 && n.index < parent_template_node->get_child_count() - 1) {
+							parent_template_node->move_child(node, n.index);
 						}
 					} else {
 						//it may be possible that an instantiated scene has changed
@@ -510,12 +516,16 @@ Node *SceneState::instantiate(GenEditState p_edit_state) const {
 				node->set_name(old_parent_path + "#" + node->get_name());
 			}
 
-			if (n.owner >= 0) {
-				NODE_FROM_ID(owner, n.owner);
-				if (owner) {
-					node->_set_owner_nocheck(owner);
-					if (node->data.unique_name_in_owner) {
-						node->_acquire_unique_name_in_owner();
+			if (node->get_inside_template_tree()) {
+				node->_set_owner_nocheck(node->get_template_root());
+			} else {
+				if (n.owner >= 0) {
+					NODE_FROM_ID(owner, n.owner);
+					if (owner) {
+						node->_set_owner_nocheck(owner);
+						if (node->data.unique_name_in_owner) {
+							node->_acquire_unique_name_in_owner();
+						}
 					}
 				}
 			}
@@ -535,8 +545,10 @@ Node *SceneState::instantiate(GenEditState p_edit_state) const {
 		ret_nodes[i] = node;
 
 		if (node && gen_node_path_cache && ret_nodes[0]) {
-			NodePath n2 = ret_nodes[0]->get_path_to(node);
-			node_path_cache[n2] = i;
+			if (!node->get_inside_template_tree()) {
+				NodePath n2 = ret_nodes[0]->get_path_to(node);
+				node_path_cache[n2] = i;
+			}
 		}
 	}
 
@@ -1045,9 +1057,11 @@ Error SceneState::_parse_node(Node *p_owner, Node *p_node, int p_parent_idx, Has
 		nodes.push_back(nd);
 	}
 
-	for (int i = 0; i < p_node->get_child_count(); i++) {
-		Node *c = p_node->get_child(i);
-		Error err = _parse_node(p_owner, c, parent_node, name_map, variant_map, node_map, nodepath_map);
+	Node *persist_node = p_node->is_dynamic_root() ? p_node->get_template_root() : p_node;
+	Node *persist_owner = p_node->is_dynamic_root() ? persist_node : p_owner;
+	for (int i = 0; i < persist_node->get_child_count(); i++) {
+		Node *c = persist_node->get_child(i);
+		Error err = _parse_node(persist_owner, c, parent_node, name_map, variant_map, node_map, nodepath_map);
 		if (err) {
 			return err;
 		}

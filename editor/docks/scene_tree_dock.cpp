@@ -63,6 +63,7 @@
 #include "scene/animation/animation_tree.h"
 #include "scene/audio/audio_stream_player.h"
 #include "scene/gui/check_box.h"
+#include "scene/main/dynamic_node.h"
 #include "scene/property_utils.h"
 #include "scene/resources/packed_scene.h"
 #include "servers/display_server.h"
@@ -2518,10 +2519,15 @@ void SceneTreeDock::_do_reparent(Node *p_new_parent, int p_position_in_parent, V
 		}
 
 		int child_pos = node->get_index(false);
+		int dyn_pos = 0;
+		DynamicNode *dyn_parent_node = Object::cast_to<DynamicNode>(node->get_parent());
+		if (dyn_parent_node) {
+			dyn_pos = -dyn_parent_node->get_unit_index(child_pos);
+		}
 		bool reparented_to_container = Object::cast_to<Container>(p_new_parent) && Object::cast_to<Control>(node);
 
 		undo_redo->add_undo_method(node->get_parent(), "add_child", node, true);
-		undo_redo->add_undo_method(node->get_parent(), "move_child", node, child_pos);
+		undo_redo->add_undo_method(node->get_parent(), "move_child", node, child_pos + dyn_pos);
 		undo_redo->add_undo_method(this, "_set_owners", edited_scene, owners);
 		if (AnimationPlayerEditor::get_singleton()->get_track_editor()->get_root() == node) {
 			undo_redo->add_undo_method(AnimationPlayerEditor::get_singleton()->get_track_editor(), "set_root", node);
